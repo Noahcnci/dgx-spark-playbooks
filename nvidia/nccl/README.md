@@ -187,9 +187,13 @@ mpirun -np 2 -H <management IP for Node 1>:1,<management IP for Node 2>:1 \
 > # below is real on DGX Spark, not a typo)
 > export NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0
 >
-> # On both nodes: jumbo frames on the CX-7 interfaces
-> sudo ip link set enp1s0f0np0 mtu 9000
-> sudo ip link set enP2p1s0f0np0 mtu 9000
+> # On both nodes: jumbo frames on the CX-7 interfaces.
+> # Port MTU 4200 gives an active_mtu of 4096, the recommended
+> # value for RoCE v2 (see "MTU Considerations for RoCE-based
+> # Applications" on the NVIDIA Enterprise Support portal).
+> # 9000 works but wastes buffer memory with no measurable gain.
+> sudo ip link set enp1s0f0np0 mtu 4200
+> sudo ip link set enP2p1s0f0np0 mtu 4200
 > ```
 >
 > Verify in the test output (with `NCCL_DEBUG=INFO`) that you see
@@ -558,6 +562,6 @@ Now you can try running a larger distributed workload such as TRT-LLM or vLLM in
 | mpirun hangs or times out | SSH connectivity issues | 1. Test basic SSH connectivity: `ssh <remote_ip>` should work without password prompts<br>2. Try a simple mpirun test: `mpirun -np 2 -H <IP for Node 1>:1,<IP for Node 2>:1 hostname`<br>3. Verify SSH keys are setup correctly for all nodes |
 | Network interface not found | Wrong interface name or down status | Check interface status with `ibdev2netdev` and verify IP configuration |
 | NCCL build fails | Missing dependencies such as OpenMPI or incorrect CUDA version | Verify CUDA installation and required libraries are present |
-| busbw stuck at ~3 GB/s regardless of buffer size | NCCL using only part of the link, or a non-release NCCL build | 1. Re-run with `NCCL_DEBUG=INFO` and check for `NET/IB : Using [0]... [1]...` (both RoCE devices)<br>2. Set `NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0` (exact names from `ibdev2netdev`; mixed capitalization is real)<br>3. Build NCCL from an exact release tag (`git clone -b v2.30.7-1 ...`); on identical hardware and settings, a development-branch build measured 3 GB/s vs 23.7 GB/s from the release tag<br>4. Set MTU 9000 on the CX-7 interfaces |
+| busbw stuck at ~3 GB/s regardless of buffer size | NCCL using only part of the link, or a non-release NCCL build | 1. Re-run with `NCCL_DEBUG=INFO` and check for `NET/IB : Using [0]... [1]...` (both RoCE devices)<br>2. Set `NCCL_IB_HCA=rocep1s0f0,roceP2p1s0f0` (exact names from `ibdev2netdev`; mixed capitalization is real)<br>3. Build NCCL from an exact release tag (`git clone -b v2.30.7-1 ...`); on identical hardware and settings, a development-branch build measured 3 GB/s vs 23.7 GB/s from the release tag<br>4. Set port MTU 4200 on the CX-7 interfaces (active_mtu 4096; 9000 adds no measurable gain and wastes buffer memory) |
 | System completely freezes during the 16 GB buffer test | Unified-memory OOM (desktop session active) | Physical power cycle, close desktop/RDP sessions, and validate with `-b 512M -e 4G -f 2` instead |
 
